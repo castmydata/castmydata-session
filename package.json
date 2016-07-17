@@ -1,6 +1,6 @@
 {
   "name": "castmydata-session",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "Session Plugin for CastMyData",
   "main": "server/castmydata-session.js",
   "scripts": {
