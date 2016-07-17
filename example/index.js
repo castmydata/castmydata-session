@@ -18,6 +18,23 @@ castmydata.register({
             });
             done();
         });
+    },
+    startup: function(app, done) {
+        app.express.get('/session', function(req, res){
+            res.json(req.session.get());
+        });
+        app.express.get('/session/destroy', function(req, res){
+            req.session.destroy(function(error) {
+                if(error) {
+                    res.status(500).json({
+                        error: error.message
+                    });
+                    return;
+                }
+                res.json(200);
+            });
+        });
+        done();
     }
 });
 castmydata.startup();
