@@ -2,16 +2,16 @@
     'use strict';
 
     angular.module('NgCastMyDataSession', [])
-        .factory('NgCastMyDataSession', ['CastMyDataServer',
-            function(CastMyDataServer) {
+        .factory('NgCastMyDataSession', ['CastMyDataServer', '$timeout',
+            function(CastMyDataServer, $timeout) {
                 CastMyData.Session.prototype.bindToScope = function($scope, param) {
                     var self = this;
                     $scope[param] = this.data;
-                    this.on('load update', function() {
+                    this.on('load set delete clear set:error delete:error clear:error', function() {
                         $scope[param] = self.data;
-                        try {
+                        $timeout(function(){
                             $scope.$digest();
-                        } catch (e) {}
+                        });
                     });
                     return this;
                 };

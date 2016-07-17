@@ -5,6 +5,7 @@
     var cookie = require('cookie');
     var redis = require('redis');
     var go = require('getobject');
+    var unset = require('unset-value');
     var redisSessionKey = 'session-store';
 
     function Session(parent, id) {
@@ -14,9 +15,8 @@
         this.protectedPaths = parent.protectedPaths;
     }
 
-    Session.prototype.destroy =
-        Session.prototype.clear = function(callback) {
-            this.set('', {}, callback);
+    Session.prototype.destroy = function(callback) {
+        this.set('', {}, callback);
     };
 
     Session.prototype.load = function(done) {
@@ -47,18 +47,48 @@
         });
     };
 
-    Session.prototype.set = function(path, value, callback) {
+    Session.prototype.canModify = function(path) {
+        var canModify = true;
         var rule = new RegExp(`^${path}`);
-        var isProtected = false;
         for (var protectedPath in this.protectedPaths) {
-            if (rule.test(protectedPath) && !isProtected) {
-                isProtected = true;
+            if (rule.test(protectedPath) && canModify) {
+                canModify = false;
             }
-            if (this.protectedPaths[protectedPath].test(path) && !isProtected) {
-                isProtected = true;
+            if (this.protectedPaths[protectedPath].test(path) && canModify) {
+                canModify = false;
             }
         }
-        if (isProtected) {
+        return canModify;
+    };
+
+    Session.prototype.clear = function(callback) {
+        for (var path in this.data) {
+            if (this.canModify(path)) {
+                delete this.data[path];
+            }
+        }
+        this.parent.app.pubsub.emit('castmydata-session#clear:' + this.id, this.data);
+        this.save(callback);
+    };
+
+    Session.prototype.delete = function(path, callback) {
+        if (!go.exists(this.data, path)) {
+            return callback(new Error(`Path ${path} not found`));
+        }
+        if (!this.canModify(path)) {
+            return callback(new Error(`Path ${path} is protected`));
+        }
+        this.deleteProtected(path, callback);
+    };
+
+    Session.prototype.deleteProtected = function(path, callback) {
+        unset(this.data, path);
+        this.parent.app.pubsub.emit(`castmydata-session#delete:${this.id}`, this.data);
+        this.save(callback);
+    };
+
+    Session.prototype.set = function(path, value, callback) {
+        if (!this.canModify(path)) {
             return callback(new Error(`Path ${path} is protected`));
         }
         this.setProtected(path, value, callback);
@@ -71,7 +101,7 @@
         } else {
             go.set(this.data, path, value);
         }
-        this.parent.app.pubsub.emit('castmydata-session#update:' + this.id, this.data);
+        this.parent.app.pubsub.emit('castmydata-session#set:' + this.id, this.data);
         this.save(callback);
     };
 
@@ -142,7 +172,7 @@
             if (socket.path == 'session') {
                 socket.on('session:load', function() {
                     var data = socket.session.get();
-                    socket.emit('session:update', data);
+                    socket.emit('session:set', data);
                     socket.session.touch();
                 });
                 socket.on('session:set', function(request) {
@@ -151,8 +181,26 @@
                         socket.emit(`session:set:${request.path}:ok`);
                     });
                 });
-                app.pubsub.on('castmydata-session#update:' + socket.sid, function(path, data) {
-                    socket.emit('session:update', data);
+                socket.on('session:delete', function(request) {
+                    socket.session.delete(request.path, function(err) {
+                        if (err) return socket.emit(`session:delete:${request.path}:deny`, err.message);
+                        socket.emit(`session:delete:${request.path}:ok`);
+                    });
+                });
+                socket.on('session:clear', function() {
+                    socket.session.clear(function(err) {
+                        if (err) return socket.emit(`session:clear:deny`, err.message);
+                        socket.emit(`session:clear:ok`);
+                    });
+                });
+                app.pubsub.on('castmydata-session#set:' + socket.sid, function(path, data) {
+                    socket.emit('session:set', data);
+                });
+                app.pubsub.on('castmydata-session#delete:' + socket.sid, function(path, data) {
+                    socket.emit('session:delete', data);
+                });
+                app.pubsub.on('castmydata-session#clear:' + socket.sid, function(path, data) {
+                    socket.emit('session:clear', data);
                 });
                 // touch session every 60 seconds
                 var interval = setInterval(function() {

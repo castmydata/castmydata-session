@@ -117,7 +117,7 @@
 
     // https://github.com/cowboy/node-getobject/blob/master/lib/getobject.js
     (function(scope) {
-        var getobject = utils.go = {};
+        var getobject = scope.go = {};
 
         function getParts(str) {
             return str.replace(/\\\./g, '\uffff').split('.').map(function(s) {
@@ -144,6 +144,20 @@
             obj = getobject.get(obj, parts, true);
             if (obj && typeof obj === 'object') {
                 return (obj[prop] = value);
+            }
+        };
+        getobject.unset = function(obj, prop) {
+            if (obj.hasOwnProperty(prop)) {
+                delete obj[prop];
+            }
+            if (getobject.get(obj, prop)) {
+                var segs = prop.split('.');
+                var last = segs.pop();
+                while (segs.length && segs[segs.length - 1].slice(-1) === '\\') {
+                    last = segs.pop().slice(0, -1) + '.' + last;
+                }
+                while (segs.length) obj = obj[prop = segs.shift()];
+                return (delete obj[last]);
             }
         };
         getobject.exists = function(obj, parts) {
@@ -197,11 +211,11 @@
             evt.forEach(function(fn) {
                 if (fn._callOnce) {
                     delete fn._callOnce;
-                    fn.call(context, data);
+                    fn.call(context, data, name);
                     me.off(name, fn);
                     return me;
                 }
-                fn.call(context, data);
+                fn.call(context, data, name);
             });
             return this;
         }
@@ -221,10 +235,20 @@
             (CastMyDataServer + '?path=session', {
                 multiplex: false
             });
-        socket.on('session:update', function(data) {
+        socket.on('session:set', function(data) {
             self.data = data;
             self.save();
-            self.emit('update');
+            self.emit('set');
+        });
+        socket.on('session:delete', function(data) {
+            self.data = data;
+            self.save();
+            self.emit('delete');
+        });
+        socket.on('session:clear', function(data) {
+            self.data = data;
+            self.save();
+            self.emit('clear');
         });
         socket.on('reconnect', function() {
             self.load();
@@ -245,12 +269,11 @@
         var self = this;
         var original = JSON.parse(JSON.stringify(this.data));
         utils.go.set(this.data, path, value);
-        this.emit('update');
+        this.emit('set');
 
         function revert(error) {
-            self.emit('set:error', error);
             self.data = original;
-            self.emit('update');
+            self.emit('set:error', error);
         }
         this._socket.once('session:set:' + path + ':deny', revert);
         this._socket.once('session:set:' + path + ':ok', function() {
@@ -260,6 +283,45 @@
             path: path,
             value: value
         });
+    };
+
+    Session.prototype.delete = function(path) {
+        var self = this;
+        if (!utils.go.exists(this.data, path)) {
+            return this.emit('delete:error', 'Path ' + path + ' does not exist');
+        }
+        var original = JSON.parse(JSON.stringify(this.data));
+        utils.go.unset(this.data, path);
+        this.emit('delete');
+
+        function revert(error) {
+            self.data = original;
+            self.emit('delete:error', error);
+        }
+        this._socket.once('session:delete:' + path + ':deny', revert);
+        this._socket.once('session:delete:' + path + ':ok', function() {
+            self._socket.off('session:delete:' + path + ':deny', revert);
+        });
+        this._socket.emit('session:delete', {
+            path: path
+        });
+    };
+
+    Session.prototype.clear = function() {
+        var self = this;
+        var original = JSON.parse(JSON.stringify(this.data));
+        this.data = {};
+        this.emit('clear');
+
+        function revert(error) {
+            self.data = original;
+            self.emit('clear:error', error);
+        }
+        this._socket.once('session:clear:deny', revert);
+        this._socket.once('session:clear:ok', function() {
+            self._socket.off('session:clear:deny', revert);
+        });
+        this._socket.emit('session:clear');
     };
 
     Session.prototype.save = function() {
