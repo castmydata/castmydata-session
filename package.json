@@ -21,8 +21,8 @@
     "url": "git+https://github.com/castmydata/castmydata-jsclient.git"
   },
   "devDependencies": {
-    "castmydata-jsclient": "castmydata/castmydata-jsclient",
-    "castmydata-server": "castmydata/castmydata-server",
+    "castmydata-jsclient": "^4.1.2",
+    "castmydata-server": "^4.2.2",
     "dotenv": "^2.0.0",
     "gulp": "^3.9.1",
     "gulp-rename": "^1.2.2",
