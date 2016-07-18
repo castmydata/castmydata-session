@@ -229,6 +229,7 @@
 
     function Session(CastMyDataServer) {
         var self = this;
+        this._sid = utils.cookies.get('cmd.sid');
         this._storage = localStorage;
         this._events = {};
         var socket = this._socket = ((typeof io !== 'undefined') ? io : require('socket.io-client'))
@@ -249,6 +250,11 @@
             self.data = data;
             self.save();
             self.emit('clear');
+        });
+        socket.on('session:destroy', function() {
+            utils.cookies.set('cmd.sid', utils.uuid(), 365 * 10);
+            self._sid = utils.cookies.get('cmd.sid');
+            self.emit('destroy');
         });
         socket.on('reconnect', function() {
             self.load();

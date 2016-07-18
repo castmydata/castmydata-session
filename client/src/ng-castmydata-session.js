@@ -7,9 +7,9 @@
                 CastMyData.Session.prototype.bindToScope = function($scope, param) {
                     var self = this;
                     $scope[param] = this.data;
-                    this.on('load set delete clear set:error delete:error clear:error', function() {
+                    this.on('load set delete clear destroy set:error delete:error clear:error', function(data, event) {
                         $scope[param] = self.data;
-                        $timeout(function(){
+                        $timeout(function() {
                             $scope.$digest();
                         });
                     });

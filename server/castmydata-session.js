@@ -15,10 +15,6 @@
         this.protectedPaths = parent.protectedPaths;
     }
 
-    Session.prototype.destroy = function(callback) {
-        this.set('', {}, callback);
-    };
-
     Session.prototype.load = function(done) {
         var self = this;
         this.parent.redis.get(`${redisSessionKey}#${this.id}`, function(err, data) {
@@ -31,19 +27,19 @@
         });
     };
 
-    Session.prototype.touch = function(done) {
-        done = done || function() {};
-        this.parent.redis.expire(`${redisSessionKey}#${this.id}`, this.parent.expiry, function(err) {
-            if (err) return done(err);
-            done(null);
-        });
-    };
-
     Session.prototype.save = function(done) {
         var self = this;
         this.parent.redis.set(`${redisSessionKey}#${this.id}`, JSON.stringify(this.data), function(err) {
             if (err) return done(err);
             self.touch(done);
+        });
+    };
+
+    Session.prototype.touch = function(done) {
+        done = done || function() {};
+        this.parent.redis.expire(`${redisSessionKey}#${this.id}`, this.parent.expiry, function(err) {
+            if (err) return done(err);
+            done(null);
         });
     };
 
@@ -61,30 +57,9 @@
         return canModify;
     };
 
-    Session.prototype.clear = function(callback) {
-        for (var path in this.data) {
-            if (this.canModify(path)) {
-                delete this.data[path];
-            }
-        }
-        this.parent.app.pubsub.emit('castmydata-session#clear:' + this.id, this.data);
-        this.save(callback);
-    };
-
-    Session.prototype.delete = function(path, callback) {
-        if (!go.exists(this.data, path)) {
-            return callback(new Error(`Path ${path} not found`));
-        }
-        if (!this.canModify(path)) {
-            return callback(new Error(`Path ${path} is protected`));
-        }
-        this.deleteProtected(path, callback);
-    };
-
-    Session.prototype.deleteProtected = function(path, callback) {
-        unset(this.data, path);
-        this.parent.app.pubsub.emit(`castmydata-session#delete:${this.id}`, this.data);
-        this.save(callback);
+    Session.prototype.get = function(path, defaults) {
+        if (!path) return this.data;
+        return (go.get(this.data, path) || defaults);
     };
 
     Session.prototype.set = function(path, value, callback) {
@@ -105,9 +80,40 @@
         this.save(callback);
     };
 
-    Session.prototype.get = function(path, defaults) {
-        if (!path) return this.data;
-        return (go.get(this.data, path) || defaults);
+    Session.prototype.delete = function(path, callback) {
+        if (!go.exists(this.data, path)) {
+            return callback(new Error(`Path ${path} not found`));
+        }
+        if (!this.canModify(path)) {
+            return callback(new Error(`Path ${path} is protected`));
+        }
+        this.deleteProtected(path, callback);
+    };
+
+    Session.prototype.deleteProtected = function(path, callback) {
+        unset(this.data, path);
+        this.parent.app.pubsub.emit(`castmydata-session#delete:${this.id}`, this.data);
+        this.save(callback);
+    };
+
+    Session.prototype.clear = function(callback) {
+        for (var path in this.data) {
+            if (this.canModify(path)) {
+                delete this.data[path];
+            }
+        }
+        this.parent.app.pubsub.emit('castmydata-session#clear:' + this.id, this.data);
+        this.save(callback);
+    };
+
+    Session.prototype.destroy = function(callback) {
+        var self = this;
+        this.setProtected('', {}, function(err) {
+            self.parent.redis.del(`${redisSessionKey}#${self.id}`, function(err) {
+                self.parent.app.pubsub.emit('castmydata-session#destroy:' + self.id, self.data);
+                callback(null);
+            });
+        });
     };
 
     function CastMyDataSession() {}
@@ -201,6 +207,12 @@
                 });
                 app.pubsub.on('castmydata-session#clear:' + socket.sid, function(path, data) {
                     socket.emit('session:clear', data);
+                });
+                app.pubsub.on('castmydata-session#destroy:' + socket.sid, function() {
+                    socket.emit('session:destroy');
+                    setTimeout(function() {
+                        socket.conn.close();
+                    });
                 });
                 // touch session every 60 seconds
                 var interval = setInterval(function() {

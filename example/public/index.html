@@ -7,8 +7,10 @@
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.5.6/angular.min.js"></script>
     <script src="https://cdn.rawgit.com/castmydata/castmydata-jsclient/v4.0.3/dist/castmydata.min.js"></script>
     <script src="https://cdn.rawgit.com/castmydata/castmydata-jsclient/v4.0.3/dist/ng-castmydata.min.js"></script>
-    <script src="https://cdn.rawgit.com/castmydata/castmydata-session/v0.1.0/client/dist/castmydata-session.min.js"></script>
-    <script src="https://cdn.rawgit.com/castmydata/castmydata-session/v0.1.0/client/dist/ng-castmydata-session.min.js"></script>
+    <script src="https://cdn.rawgit.com/castmydata/castmydata-session/v0.2.0/client/dist/castmydata-session.min.js"></script>
+    <script src="https://cdn.rawgit.com/castmydata/castmydata-session/v0.2.0/client/dist/ng-castmydata-session.min.js"></script>
+    <!-- <script src="http://www.dev/castmydata/plugins/session/client/src/castmydata-session.js"></script>
+    <script src="http://www.dev/castmydata/plugins/session/client/src/ng-castmydata-session.js"></script> -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.6/css/bootstrap.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.1/themes/prism.min.css">
     <style>
@@ -24,42 +26,61 @@
             .value('CastMyDataServer', '')
             .run(function($rootScope, NgCastMyDataSession) {
                 $rootScope.Session = {};
-                NgCastMyDataSession.bindToScope($rootScope, 'Session');
+                $rootScope.SessionStore = NgCastMyDataSession;
+                $rootScope.SessionStore.bindToScope($rootScope, 'Session');
             })
-            .controller('SessionController', function($scope, NgCastMyDataSession, $http) {
+            .controller('SessionController', function($scope, $http) {
+
+                // Set Session Value
                 $scope.setError = '';
-                NgCastMyDataSession.on('set:error', function(error) {
+                $scope.SessionStore.on('set:error', function(error) {
                     $scope.setError = error;
-                });
-                $scope.deleteError = '';
-                NgCastMyDataSession.on('delete:error', function(error) {
-                    $scope.deleteError = error;
-                });
-                $scope.clearError = '';
-                NgCastMyDataSession.on('clear:error', function(error) {
-                    $scope.clearError = error;
                 });
                 $scope.setSession = function() {
                     $scope.setError = '';
-                    NgCastMyDataSession.set($scope.setPath, $scope.setValue);
+                    $scope.SessionStore.set($scope.setPath, $scope.setValue);
                     $scope.setPath = '';
                     $scope.setValue = '';
                 };
+
+                // Delete Session Value
+                $scope.deleteError = '';
+                $scope.SessionStore.on('delete:error', function(error) {
+                    $scope.deleteError = error;
+                });
                 $scope.deleteSession = function() {
                     $scope.deleteError = '';
-                    NgCastMyDataSession.delete($scope.deletePath);
+                    $scope.SessionStore.delete($scope.deletePath);
                     $scope.deletePath = '';
                 };
+
+                // Clear Sessions
+                $scope.clearError = '';
+                $scope.SessionStore.on('clear:error', function(error) {
+                    $scope.clearError = error;
+                });
                 $scope.clearSession = function() {
                     $scope.clearError = '';
-                    NgCastMyDataSession.clear();
+                    $scope.SessionStore.clear();
                 };
+
+                // View Express Sessions
                 $scope.expressSession = {};
                 $scope.getExpressSession = function() {
+                    $scope.expressSession = {};
                     $http.get('/session')
                         .then(function(results){
                             $scope.expressSession = results.data;
                         });
+                };
+
+                // Destroy Sessions
+                $scope.sid = $scope.SessionStore._sid;
+                $scope.$watch('SessionStore._sid', function(){
+                    $scope.sid = $scope.SessionStore._sid;
+                });
+                $scope.getDestroySession = function() {
+                    $http.get('/session/destroy');
                 };
             });
     </script>
@@ -94,44 +115,62 @@ angular.module('sample', ['NgCastMyData', 'NgCastMyDataSession'])
     .value('CastMyDataServer', '')
     .run(function($rootScope, NgCastMyDataSession) {
         $rootScope.Session = {};
+        $rootScope.SessionStore = NgCastMyDataSession;
 
         // Bind session data to $rootScope.Session
-        NgCastMyDataSession.bindToScope($rootScope, 'Session');
+        $rootScope.SessionStore.bindToScope($rootScope, 'Session');
     })
-    .controller('SessionController', function($scope, NgCastMyDataSession, $http) {
+    .controller('SessionController', function($scope, $http) {
+        // Set Session Value
         $scope.setError = '';
-        NgCastMyDataSession.on('set:error', function(error) {
+        $scope.SessionStore.on('set:error', function(error) {
             $scope.setError = error;
-        });
-        $scope.deleteError = '';
-        NgCastMyDataSession.on('delete:error', function(error) {
-            $scope.deleteError = error;
-        });
-        $scope.clearError = '';
-        NgCastMyDataSession.on('clear:error', function(error) {
-            $scope.clearError = error;
         });
         $scope.setSession = function() {
             $scope.setError = '';
-            NgCastMyDataSession.set($scope.setPath, $scope.setValue);
+            $scope.SessionStore.set($scope.setPath, $scope.setValue);
             $scope.setPath = '';
             $scope.setValue = '';
         };
+
+        // Delete Session Value
+        $scope.deleteError = '';
+        $scope.SessionStore.on('delete:error', function(error) {
+            $scope.deleteError = error;
+        });
         $scope.deleteSession = function() {
             $scope.deleteError = '';
-            NgCastMyDataSession.delete($scope.deletePath);
+            $scope.SessionStore.delete($scope.deletePath);
             $scope.deletePath = '';
         };
+
+        // Clear Sessions
+        $scope.clearError = '';
+        $scope.SessionStore.on('clear:error', function(error) {
+            $scope.clearError = error;
+        });
         $scope.clearSession = function() {
             $scope.clearError = '';
-            NgCastMyDataSession.clear();
+            $scope.SessionStore.clear();
         };
+
+        // View Express Sessions
         $scope.expressSession = {};
         $scope.getExpressSession = function() {
+            $scope.expressSession = {};
             $http.get('/session')
                 .then(function(results){
                     $scope.expressSession = results.data;
                 });
+        };
+
+        // Destroy Sessions
+        $scope.sid = $scope.SessionStore._sid;
+        $scope.$watch('SessionStore._sid', function(){
+            $scope.sid = $scope.SessionStore._sid;
+        });
+        $scope.getDestroySession = function() {
+            $http.get('/session/destroy');
         };
     });
 </code></pre>
@@ -174,13 +213,18 @@ angular.module('sample', ['NgCastMyData', 'NgCastMyDataSession'])
                 </form>
                 <hr>
                 <p class="lead">Get Express Session</p>
-                <p class="alert alert-danger" ng-show="clearError">Error: <span ng-bind="clearError"></span></p>
                 <form ng-submit="getExpressSession()">
 <pre class="well">{{expressSession | json}}</pre>
                     <button class="btn btn-primary">
                         Get Session
                     </button>
                 </form>
+                <hr>
+                <p class="lead">Destroy / Regenerate Session</p>
+                <p>SID: <span ng-bind="sid"></span></p>
+                <button ng-click="getDestroySession()" class="btn btn-primary">
+                    Destroy Session
+                </button>
                 <hr>
                 <p class="lead">Current Session</p>
 <pre>{{Session | json}}</pre>
